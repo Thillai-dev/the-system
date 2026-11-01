@@ -1,5 +1,5 @@
 
-const CACHE_NAME = "the-system-v2";
+const CACHE_NAME = "the-system-v3";
 
 const FILES = [
   "./",
@@ -7,7 +7,7 @@ const FILES = [
   "./style.css",
   "./script.js",
   "./manifest.json",
-  "./icon.svg"
+  "./icon.png"
 ];
 
 self.addEventListener("install", event => {
@@ -81,8 +81,8 @@ self.addEventListener("push", event => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: "./icon.svg",
-      badge: "./icon.svg"
+      icon: "./icon.png",
+      badge: "./icon.png"
     })
   );
 });
