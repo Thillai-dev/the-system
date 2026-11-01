@@ -1,121 +1,106 @@
 
-"use strict";
-
-const STORAGE_KEY = "theSystemPlayer_v2";
-
 const $ = id => document.getElementById(id);
 
-function getToday() {
-  const d = new Date();
-  return [
-    d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, "0"),
-    String(d.getDate()).padStart(2, "0")
-  ].join("-");
-}
+const STORAGE_KEY = "theSystem_v2";
 
-function makeId() {
-  return window.crypto?.randomUUID?.() ||
-    "mission-" + Date.now() + "-" + Math.random().toString(36).slice(2);
-}
+const today = () => new Date().toLocaleDateString("en-CA");
 
-const DEFAULT_MISSIONS = [
-  { name: "Study", target: 25, unit: "minutes", step: 5, xp: 25 },
-  { name: "Walking", target: 10, unit: "minutes", step: 1, xp: 20 },
-  { name: "Stretching", target: 5, unit: "minutes", step: 1, xp: 15 },
-  { name: "Reading", target: 10, unit: "minutes", step: 1, xp: 20 },
-  { name: "Take a water break", target: 3, unit: "breaks", step: 1, xp: 15 }
-];
-
-const ATTRIBUTE_NAMES = [
-  "Strength", "Intelligence", "Agility", "Vitality"
-];
-
-function makeMission(data) {
-  return {
-    id: makeId(),
-    name: data.name,
-    target: data.target,
-    unit: data.unit,
-    step: data.step || 1,
-    xp: data.xp || 15,
-    progress: 0,
-    done: false
-  };
-}
-
-function makeNewDay(custom = [], recovery = false) {
-  return {
-    date: getToday(),
-    missions: [...DEFAULT_MISSIONS, ...custom].map(makeMission),
-    recovery: recovery
-      ? { name: "Plan tomorrow", done: false, xp: 5 }
-      : null
-  };
-}
-
-function createInitialState() {
+function initialState() {
   return {
     accepted: false,
     xp: 0,
     streak: 0,
     totalCompleted: 0,
-    freePoints: 0,
-    lastLevel: 1,
-
-    attributes: {
-      Strength: 1,
-      Intelligence: 1,
-      Agility: 1,
-      Vitality: 1
-    },
-
-    customMissions: [],
-    day: makeNewDay(),
     history: [],
-    lastReminderDate: ""
+    lastDay: today(),
+    lastReminderDate: "",
+    runDay: new Date().getDay() === 1 ||
+            new Date().getDay() === 3 ||
+            new Date().getDay() === 5,
+    day: {
+      date: today(),
+      recovery: null,
+      missions: []
+    },
+    attributes: {
+      strength: 0,
+      agility: 0,
+      vitality: 0,
+      discipline: 0
+    }
   };
 }
 
-function loadState() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+function makeMissions() {
+  const runDay = new Date().getDay() === 1 ||
+                 new Date().getDay() === 3 ||
+                 new Date().getDay() === 5;
 
-    if (
-      saved &&
-      saved.day &&
-      Array.isArray(saved.day.missions) &&
-      saved.attributes &&
-      saved.history
-    ) {
-      return {
-        ...createInitialState(),
-        ...saved,
-        attributes: {
-          ...createInitialState().attributes,
-          ...saved.attributes
-        }
-      };
+  return [
+    {
+      id: "running",
+      name: "RUNNING",
+      description: runDay
+        ? "Running goal: 5 km"
+        : "Recovery day: running is optional",
+      target: 5,
+      progress: 0,
+      unit: "km",
+      done: false,
+      active: runDay
+    },
+    {
+      id: "pushups",
+      name: "PUSH-UPS",
+      description: "Build strength gradually",
+      target: 10,
+      progress: 0,
+      unit: "reps",
+      done: false,
+      active: true
+    },
+    {
+      id: "situps",
+      name: "SIT-UPS",
+      description: "Controlled repetitions",
+      target: 10,
+      progress: 0,
+      unit: "reps",
+      done: false,
+      active: true
+    },
+    {
+      id: "squats",
+      name: "SQUATS",
+      description: "Controlled bodyweight squats",
+      target: 10,
+      progress: 0,
+      unit: "reps",
+      done: false,
+      active: true
     }
-  } catch (error) {
-    console.warn("Could not load player data:", error);
-  }
-
-  return createInitialState();
+  ];
 }
 
-let state = loadState();
+function createInitialState() {
+  const s = initialState();
+  s.day.missions = makeMissions();
+  return s;
+}
+
+let state;
+
+try {
+  state = JSON.parse(localStorage.getItem(STORAGE_KEY));
+  if (!state || !state.day || !state.day.missions) {
+    state = createInitialState();
+  }
+} catch {
+  state = createInitialState();
+}
 
 function save() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (error) {
-    toast("Unable to save data on this device.");
-  }
-}
-
-function getLevel() {
-  return Math.floor(state.xp / 100) + 1;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 function escapeHTML(value) {
@@ -128,137 +113,37 @@ function escapeHTML(value) {
   })[char]);
 }
 
-// TOAST MESSAGES
-
-let toastTimeout;
-
 function toast(message) {
-  const el = $("toast");
-  el.textContent = message;
-  el.classList.add("show");
+  const element = $("toast");
+  if (!element) return;
 
-  clearTimeout(toastTimeout);
+  element.textContent = message;
+  element.classList.remove("hidden");
 
-  toastTimeout = setTimeout(() => {
-    el.classList.remove("show");
-  }, 2500);
+  setTimeout(() => element.classList.add("hidden"), 2500);
 }
 
-// NOTIFICATIONS
+function getLevel() {
+  return Math.floor(state.xp / 100) + 1;
+}
 
-let serviceWorkerRegistration = null;
+function awardXP(amount) {
+  const oldLevel = getLevel();
 
-if ("serviceWorker" in navigator && location.protocol === "https:") {
-  navigator.serviceWorker.register("./sw.js")
-    .then(registration => {
-      serviceWorkerRegistration = registration;
-      console.log("System service worker registered.");
-    })
-    .catch(error => {
-      console.warn("Service worker error:", error);
+  state.xp += amount;
+
+  const newLevel = getLevel();
+
+  if (newLevel > oldLevel) {
+    Object.keys(state.attributes).forEach(key => {
+      state.attributes[key] += 2;
     });
-}
 
-function sendNotification(title, message) {
-  if (
-    !("Notification" in window) ||
-    Notification.permission !== "granted"
-  ) return;
-
-  if (serviceWorkerRegistration) {
-    serviceWorkerRegistration.showNotification(title, {
-      body: message,
-      icon: "./icon.svg",
-      badge: "./icon.svg",
-      tag: title
-    });
-  } else if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.ready
-      .then(reg => reg.showNotification(title, {
-        body: message,
-        icon: "./icon.svg",
-        badge: "./icon.svg",
-        tag: title
-      }))
-      .catch(() => {});
-  }
-}
-
-$("notifications").onclick = async () => {
-  if (!("Notification" in window)) {
-    toast("Notifications are not supported by this browser.");
-    return;
+    toast("LEVEL UP! YOU ARE NOW LEVEL " + newLevel);
   }
 
-  try {
-    const permission = await Notification.requestPermission();
-
-    if (permission === "granted") {
-      $("notificationStatus").textContent =
-        "Notifications enabled.";
-
-      sendNotification(
-        "SYSTEM ACTIVATED",
-        "You are now receiving system notifications."
-      );
-
-      toast("NOTIFICATIONS ENABLED");
-    } else {
-      $("notificationStatus").textContent =
-        "Permission was not granted. Check browser settings.";
-    }
-  } catch (error) {
-    toast("Could not enable notifications.");
-  }
-};
-
-function updateNotificationStatus() {
-  if (!("Notification" in window)) {
-    $("notificationStatus").textContent =
-      "This browser does not support notifications.";
-  } else if (Notification.permission === "granted") {
-    $("notificationStatus").textContent =
-      "Notifications enabled.";
-  } else {
-    $("notificationStatus").textContent =
-      "Notifications are not enabled.";
-  }
-}
-
-// PLAYER QUALIFICATION
-
-function enterSystem() {
-  state.accepted = true;
   save();
-
-  $("welcome").classList.add("hidden");
-  $("app").classList.remove("hidden");
-
-  render();
-  toast("PLAYER REGISTRATION COMPLETE");
-
-  sendNotification(
-    "SYSTEM ACTIVATED",
-    "Welcome, Player."
-  );
 }
-
-$("accept").onclick = enterSystem;
-
-$("decline").onclick = () => {
-  $("declineMessage").textContent =
-    "THE INVITATION REMAINS OPEN. YOUR DESTINY AWAITS.";
-};
-
-if (state.accepted) {
-  $("welcome").classList.add("hidden");
-  $("app").classList.remove("hidden");
-} else {
-  $("welcome").classList.remove("hidden");
-  $("app").classList.add("hidden");
-}
-
-// DAILY COUNTDOWN
 
 function updateTimer() {
   const now = new Date();
@@ -266,292 +151,155 @@ function updateTimer() {
 
   midnight.setHours(24, 0, 0, 0);
 
-  let seconds = Math.max(
+  const seconds = Math.max(
     0,
     Math.floor((midnight - now) / 1000)
   );
 
   const hours = Math.floor(seconds / 3600);
-  seconds %= 3600;
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
 
-  const minutes = Math.floor(seconds / 60);
-  seconds %= 60;
+  const timer = $("countdown");
 
-  $("timer").textContent = [
-    hours,
-    minutes,
-    seconds
-  ].map(number => String(number).padStart(2, "0")).join(":");
+  if (timer) {
+    timer.textContent =
+      String(hours).padStart(2, "0") + ":" +
+      String(minutes).padStart(2, "0") + ":" +
+      String(remainingSeconds).padStart(2, "0");
+  }
 }
 
-// DAILY QUEST RESET
-
 function checkNewDay() {
-  if (state.day.date === getToday()) return;
+  if (state.lastDay === today()) return;
 
-  const oldDay = state.day;
-  const completed = oldDay.missions.filter(m => m.done).length;
-  const total = oldDay.missions.length;
-  const allDone = total > 0 && completed === total;
+  const completed = state.day.missions.filter(
+    m => m.done
+  ).length;
+
+  const total = state.day.missions.length;
 
   state.history.unshift({
-    date: oldDay.date,
+    date: state.lastDay,
     completed,
     total,
-    xp: oldDay.missions
-      .filter(m => m.done)
-      .reduce((sum, m) => sum + m.xp, 0)
+    xp: state.xp
   });
 
-  state.history = state.history.slice(0, 60);
+  state.history = state.history.slice(0, 30);
 
-  state.streak = allDone ? state.streak + 1 : 0;
-
-  state.day = makeNewDay(
-    state.customMissions,
-    !allDone
-  );
-
-  state.lastReminderDate = "";
-
-  save();
-
-  if (!allDone) {
-    sendNotification(
-      "SYSTEM ALERT",
-      "Your new daily quests are ready. A recovery mission is available."
-    );
+  if (completed === total) {
+    state.streak++;
   } else {
-    sendNotification(
-      "DAILY QUEST",
-      "Your new daily quests are ready."
-    );
+    state.streak = 0;
   }
 
+  state.lastDay = today();
+
+  const previousMissed = completed < total;
+
+  state.day = {
+    date: today(),
+    missions: makeMissions(),
+    recovery: previousMissed
+      ? { done: false }
+      : null
+  };
+
+  save();
   render();
 }
 
-// XP AND LEVELS
+function renderMissions() {
+  const container = $("missionList");
+  if (!container) return;
 
-function awardXP(amount) {
-  const previousLevel = getLevel();
-
-  state.xp += amount;
-
-  const newLevel = getLevel();
-
-  if (newLevel > previousLevel) {
-    const gainedLevels = newLevel - previousLevel;
-
-    state.freePoints += gainedLevels * 2;
-
-    toast("LEVEL UP! ATTRIBUTE POINTS EARNED.");
-
-    sendNotification(
-      "LEVEL UP",
-      "Congratulations! You reached level " + newLevel + "."
+  container.innerHTML = state.day.missions.map(m => {
+    const percentage = Math.min(
+      100,
+      (m.progress / m.target) * 100
     );
-  } else {
-    toast("QUEST COMPLETE! +" + amount + " XP");
-  }
+
+    return `
+      <div class="mission">
+        <div class="mission-header">
+          <strong>${escapeHTML(m.name)}</strong>
+          <span>${m.progress} / ${m.target} ${m.unit}</span>
+        </div>
+
+        <p class="muted">
+          ${escapeHTML(m.description)}
+        </p>
+
+        <div class="progress-track">
+          <div class="progress-fill"
+               style="width:${percentage}%"></div>
+        </div>
+
+        ${
+          m.done
+          ? '<p class="success">QUEST COMPLETED ✓</p>'
+          : m.active
+            ? `
+              <button class="primary full"
+                data-add="${m.id}">
+                + ADD PROGRESS
+              </button>
+            `
+            : '<p class="muted">Recovery day</p>'
+        }
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll("[data-add]").forEach(button => {
+    button.onclick = () => addProgress(button.dataset.add);
+  });
 }
 
-// MISSION PROGRESS
-
-function updateMission(id) {
+function addProgress(id) {
   const mission = state.day.missions.find(m => m.id === id);
 
-  if (!mission || mission.done) return;
+  if (!mission || mission.done || !mission.active) return;
+
+  const amount = id === "running" ? 0.5 : 1;
 
   mission.progress = Math.min(
     mission.target,
-    mission.progress + mission.step
+    mission.progress + amount
   );
 
   if (mission.progress >= mission.target) {
     mission.done = true;
     state.totalCompleted++;
-    awardXP(mission.xp);
 
-    sendNotification(
-      "QUEST COMPLETE",
-      mission.name + " completed successfully."
-    );
+    awardXP(25);
+    toast("QUEST COMPLETED! +25 XP");
   }
 
   save();
   render();
 }
-
-function completeRecovery() {
-  if (!state.day.recovery || state.day.recovery.done) return;
-
-  state.day.recovery.done = true;
-  state.totalCompleted++;
-
-  awardXP(state.day.recovery.xp);
-
-  save();
-  render();
-
-  toast("RECOVERY MISSION COMPLETE");
-}
-
-// CUSTOM MISSIONS
-
-$("addMission").onclick = () => {
-  const name = prompt("Enter your mission name:");
-
-  if (!name || !name.trim()) return;
-
-  const target = Number(
-    prompt("Enter the target number:", "10")
-  );
-
-  if (
-    !Number.isInteger(target) ||
-    target < 1 ||
-    target > 1000
-  ) {
-    toast("Enter a target between 1 and 1000.");
-    return;
-  }
-
-  const unit = prompt(
-    "Enter the unit (minutes, pages, tasks, etc.):",
-    "tasks"
-  );
-
-  if (!unit || !unit.trim()) return;
-
-  const missionData = {
-    name: name.trim(),
-    target,
-    unit: unit.trim(),
-    step: 1,
-    xp: 15
-  };
-
-  state.customMissions.push(missionData);
-  state.day.missions.push(makeMission(missionData));
-
-  save();
-  render();
-
-  toast("CUSTOM MISSION ADDED");
-};
-
-// PLAYER ATTRIBUTES
-
-function allocateAttribute(name) {
-  if (state.freePoints <= 0) {
-    toast("NO ATTRIBUTE POINTS AVAILABLE");
-    return;
-  }
-
-  state.attributes[name]++;
-  state.freePoints--;
-
-  save();
-  render();
-
-  toast(name.toUpperCase() + " INCREASED");
-}
-
-// RENDER MISSIONS
-
-function renderMissions() {
-  const container = $("missions");
-
-  container.innerHTML = state.day.missions.map(m => `
-    <div class="mission ${m.done ? "done" : ""}">
-      <div class="mission-title">
-        <span>${escapeHTML(m.name)}</span>
-        <span class="reward">+${m.xp} XP</span>
-      </div>
-
-      <div class="mission-controls">
-        <span class="counter">
-          ${m.progress} / ${m.target} ${escapeHTML(m.unit)}
-        </span>
-
-        <div>
-          <button class="secondary"
-            data-add="${m.id}"
-            ${m.done ? "disabled" : ""}>
-            +${m.step}
-          </button>
-
-          <button class="primary"
-            data-complete="${m.id}"
-            ${m.done ? "disabled" : ""}>
-            ${m.done ? "DONE ✓" : "COMPLETE"}
-          </button>
-        </div>
-      </div>
-    </div>
-  `).join("");
-
-  container.querySelectorAll("[data-add]").forEach(button => {
-    button.onclick = () => updateMission(button.dataset.add);
-  });
-
-  container.querySelectorAll("[data-complete]").forEach(button => {
-    button.onclick = () => {
-      const mission = state.day.missions.find(
-        m => m.id === button.dataset.complete
-      );
-
-      if (!mission || mission.done) return;
-
-      if (mission.progress < mission.target) {
-        toast("REACH THE TARGET BEFORE COMPLETING.");
-        return;
-      }
-
-      updateMission(mission.id);
-    };
-  });
-
-  const total = state.day.missions.length;
-  const done = state.day.missions.filter(m => m.done).length;
-  const percentage = total
-    ? Math.round(done / total * 100)
-    : 0;
-
-  $("progressText").textContent = percentage + "%";
-  $("questBar").style.width = percentage + "%";
-}
-
-// PLAYER STATUS
 
 function renderAttributes() {
-  $("freePoints").textContent = state.freePoints;
+  const container = $("attributes");
+  if (!container) return;
 
-  $("attributes").innerHTML = ATTRIBUTE_NAMES.map(name => `
-    <div class="attribute">
-      <span>${name.toUpperCase()}</span>
-      <strong>${state.attributes[name]}</strong>
-      <button class="secondary"
-        data-stat="${name}"
-        ${state.freePoints <= 0 ? "disabled" : ""}>
-        +
-      </button>
-    </div>
-  `).join("");
+  container.innerHTML = Object.entries(state.attributes)
+    .map(([name, value]) => `
+      <div class="attribute">
+        <strong>${escapeHTML(name.toUpperCase())}</strong>
+        <span>${value}</span>
+      </div>
+    `).join("");
 
-  $("attributes").querySelectorAll("[data-stat]").forEach(button => {
-    button.onclick = () => allocateAttribute(button.dataset.stat);
-  });
-
-  $("attributeHeading").textContent =
-    "PLAYER ATTRIBUTES";
+  const heading = $("attributeHeading");
+  if (heading) heading.textContent = "PLAYER ATTRIBUTES";
 }
-
-// QUEST HISTORY
 
 function renderHistory() {
   const container = $("historyList");
+  if (!container) return;
 
   if (!state.history.length) {
     container.innerHTML =
@@ -568,21 +316,21 @@ function renderHistory() {
   `).join("");
 }
 
-// RECOVERY MISSION
-
 function renderRecovery() {
   const panel = $("recoveryPanel");
   const task = $("recoveryTask");
+
+  if (!panel || !task) return;
 
   if (state.day.recovery && !state.day.recovery.done) {
     panel.classList.remove("hidden");
 
     task.innerHTML = `
       <div class="mission">
-        <strong>PLAN TOMORROW</strong>
+        <strong>RECOVERY QUEST</strong>
         <p class="muted">
-          Take five minutes to plan your next day.
-          This is optional.
+          Take five minutes to plan tomorrow.
+          No extra exercise required.
         </p>
         <button class="primary full" id="recoveryComplete">
           MARK COMPLETE
@@ -590,31 +338,103 @@ function renderRecovery() {
       </div>
     `;
 
-    $("recoveryComplete").onclick = completeRecovery;
+    $("recoveryComplete").onclick = () => {
+      state.day.recovery.done = true;
+      save();
+      render();
+      toast("RECOVERY QUEST COMPLETED");
+    };
   } else {
     panel.classList.add("hidden");
   }
 }
 
-// MAIN RENDER
+function updateNotificationStatus() {
+  const element = $("notificationStatus");
+  if (!element) return;
+
+  element.textContent =
+    !("Notification" in window)
+      ? "Notifications unavailable"
+      : Notification.permission === "granted"
+        ? "Notifications enabled"
+        : "Notifications not enabled";
+}
+
+function sendNotification(title, message) {
+  if (
+    "Notification" in window &&
+    Notification.permission === "granted"
+  ) {
+    new Notification(title, {
+      body: message,
+      icon: "./icon-192.png"
+    });
+  }
+}
+
+function checkReminder() {
+  if (
+    !state.accepted ||
+    !("Notification" in window) ||
+    Notification.permission !== "granted"
+  ) return;
+
+  const incomplete = state.day.missions.some(
+    m => m.active && !m.done
+  );
+
+  if (
+    incomplete &&
+    new Date().getHours() >= 18 &&
+    state.lastReminderDate !== today()
+  ) {
+    state.lastReminderDate = today();
+    save();
+
+    sendNotification(
+      "SYSTEM REMINDER",
+      "Check your daily quests. Remember to rest when needed."
+    );
+  }
+}
+
+const notificationButton = $("enableNotifications");
+
+if (notificationButton) {
+  notificationButton.onclick = async () => {
+    if (!("Notification" in window)) {
+      toast("NOTIFICATIONS NOT SUPPORTED");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+
+    updateNotificationStatus();
+
+    if (permission === "granted") {
+      toast("NOTIFICATIONS ENABLED");
+    }
+  };
+}
 
 function render() {
   if (!state.accepted) return;
 
-  const currentLevel = getLevel();
+  const level = getLevel();
   const xpInLevel = state.xp % 100;
 
-  $("level").textContent = "LV. " + currentLevel;
-  $("xpText").textContent = xpInLevel + " / 100 XP";
-  $("xpBar").style.width = xpInLevel + "%";
+  if ($("level")) $("level").textContent = "LV. " + level;
+  if ($("xpText")) $("xpText").textContent = xpInLevel + " / 100 XP";
+  if ($("xpBar")) $("xpBar").style.width = xpInLevel + "%";
 
-  $("dashLevel").textContent = currentLevel;
-  $("dashXP").textContent = state.xp;
-  $("streak").textContent = state.streak;
-  $("completed").textContent = state.totalCompleted;
+  if ($("dashLevel")) $("dashLevel").textContent = level;
+  if ($("dashXP")) $("dashXP").textContent = state.xp;
+  if ($("streak")) $("streak").textContent = state.streak;
+  if ($("completed")) $("completed").textContent = state.totalCompleted;
 
-  $("statusLevel").textContent = currentLevel;
-  $("statusXP").textContent = state.xp + " XP";
+  if ($("statusLevel")) $("statusLevel").textContent = level;
+  if ($("statusXP")) $("statusXP").textContent = state.xp + " XP";
 
   renderMissions();
   renderAttributes();
@@ -622,8 +442,6 @@ function render() {
   renderRecovery();
   updateNotificationStatus();
 }
-
-// NAVIGATION
 
 document.querySelectorAll(".nav-btn").forEach(button => {
   button.onclick = () => {
@@ -633,7 +451,7 @@ document.querySelectorAll(".nav-btn").forEach(button => {
       section.classList.add("hidden");
     });
 
-    $(page).classList.remove("hidden");
+    if ($(page)) $(page).classList.remove("hidden");
 
     document.querySelectorAll(".nav-btn").forEach(nav => {
       nav.classList.remove("active");
@@ -643,65 +461,53 @@ document.querySelectorAll(".nav-btn").forEach(button => {
   };
 });
 
-// REMINDERS WHILE THE APP IS OPEN
+const acceptButton = $("accept");
 
-function checkReminder() {
-  if (
-    !state.accepted ||
-    !("Notification" in window) ||
-    Notification.permission !== "granted"
-  ) return;
-
-  const incomplete = state.day.missions.some(m => !m.done);
-
-  if (!incomplete) return;
-
-  const currentHour = new Date().getHours();
-
-  if (
-    currentHour >= 18 &&
-    state.lastReminderDate !== getToday()
-  ) {
-    state.lastReminderDate = getToday();
+if (acceptButton) {
+  acceptButton.onclick = () => {
+    state.accepted = true;
     save();
 
-    sendNotification(
-      "SYSTEM REMINDER",
-      "You still have daily quests remaining. Take care of yourself."
-    );
-  }
+    $("welcome").classList.add("hidden");
+    $("app").classList.remove("hidden");
+
+    render();
+    toast("WELCOME, PLAYER");
+  };
 }
 
-// RESET PLAYER DATA
+const resetButton = $("reset");
 
-$("reset").onclick = () => {
-  const confirmed = confirm(
-    "Reset all player data on this device?"
-  );
+if (resetButton) {
+  resetButton.onclick = () => {
+    if (!confirm("Reset all player data?")) return;
 
-  if (!confirmed) return;
+    localStorage.removeItem(STORAGE_KEY);
+    state = createInitialState();
+    save();
 
-  localStorage.removeItem(STORAGE_KEY);
+    location.reload();
+  };
+}
 
-  state = createInitialState();
-  save();
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js")
+      .catch(error => console.error("SW error:", error));
+  });
+}
 
-  $("welcome").classList.remove("hidden");
-  $("app").classList.add("hidden");
-
-  toast("PLAYER DATA RESET");
-};
-
-// INITIALIZATION
+if (state.accepted) {
+  $("welcome")?.classList.add("hidden");
+  $("app")?.classList.remove("hidden");
+  render();
+} else {
+  $("welcome")?.classList.remove("hidden");
+  $("app")?.classList.add("hidden");
+}
 
 checkNewDay();
 updateTimer();
-
-if (state.accepted) {
-  $("welcome").classList.add("hidden");
-  $("app").classList.remove("hidden");
-  render();
-}
 
 setInterval(() => {
   updateTimer();
