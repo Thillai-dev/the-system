@@ -1,19 +1,17 @@
 
 {
-  "name": "THE SYSTEM - Player Interface",
+  "name": "THE SYSTEM",
   "short_name": "THE SYSTEM",
-  "description": "Your personal RPG progression system",
-  "start_url": "./index.html",
-  "scope": "./",
+  "start_url": "./",
   "display": "standalone",
+  "background_color": "#050510",
+  "theme_color": "#080014",
   "orientation": "portrait",
-  "background_color": "#020916",
-  "theme_color": "#020916",
   "icons": [
     {
-      "src": "./icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
       "purpose": "any"
     }
   ]
