@@ -1,0 +1,171 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#020916">
+  <meta name="description" content="Your personal player progression system">
+  <title>THE SYSTEM</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+  <!-- PLAYER QUALIFICATION -->
+  <div id="welcome" class="overlay">
+    <div class="dialog">
+      <div class="system-label">SYSTEM NOTIFICATION</div>
+      <h1>PLAYER QUALIFICATION</h1>
+      <div class="line"></div>
+      <p>You are qualified to become a player. Do you accept?</p>
+      <button id="accept" class="primary">ACCEPT</button>
+      <button id="decline" class="secondary">DECLINE</button>
+      <p id="declineMessage" class="small"></p>
+    </div>
+  </div>
+
+  <main id="app" class="hidden">
+
+    <header class="hud">
+      <div class="top">
+        <h1>◈ THE SYSTEM</h1>
+        <span id="level">LV. 1</span>
+      </div>
+
+      <div class="timer-box">
+        <span>TIME REMAINING</span>
+        <strong id="timer">00:00:00</strong>
+      </div>
+
+      <div class="xp-label">
+        <span>EXPERIENCE</span>
+        <span id="xpText">0 / 100 XP</span>
+      </div>
+
+      <div class="xp-track">
+        <div id="xpBar"></div>
+      </div>
+    </header>
+
+    <!-- HOME -->
+    <section id="dashboard" class="page">
+      <div class="panel">
+        <div class="panel-heading">
+          <h2>DAILY QUEST</h2>
+          <span class="badge">ACTIVE</span>
+        </div>
+
+        <p class="muted">Complete your missions at your own pace.</p>
+
+        <div id="missions"></div>
+
+        <div class="progress-info">
+          <span>QUEST PROGRESS</span>
+          <strong id="progressText">0%</strong>
+        </div>
+
+        <div class="xp-track">
+          <div id="questBar"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>SYSTEM STATUS</h2>
+        <div class="quick-stats">
+          <div><span>LEVEL</span><strong id="dashLevel">1</strong></div>
+          <div><span>TOTAL XP</span><strong id="dashXP">0</strong></div>
+          <div><span>STREAK</span><strong id="streak">0</strong></div>
+          <div><span>COMPLETED</span><strong id="completed">0</strong></div>
+        </div>
+      </div>
+
+      <div id="recoveryPanel" class="panel warning hidden">
+        <h2>SYSTEM ALERT</h2>
+        <p>A recovery mission is available after yesterday's unfinished quests.</p>
+        <div id="recoveryTask"></div>
+      </div>
+    </section>
+
+    <!-- PLAYER STATUS -->
+    <section id="status" class="page hidden">
+      <div class="panel">
+        <h2>PLAYER STATUS</h2>
+        <div class="player-rank">AWAKENED PLAYER</div>
+
+        <div class="status-number">
+          <span>LEVEL</span>
+          <strong id="statusLevel">1</strong>
+        </div>
+
+        <div class="status-number">
+          <span>TOTAL EXPERIENCE</span>
+          <strong id="statusXP">0 XP</strong>
+        </div>
+
+        <h3 id="attributeHeading">ATTRIBUTES</h3>
+        <p class="muted">Available points: <strong id="freePoints">0</strong></p>
+        <div id="attributes"></div>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="history" class="page hidden">
+      <div class="panel">
+        <h2>QUEST HISTORY</h2>
+        <div id="historyList"></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="settings" class="page hidden">
+      <div class="panel">
+        <h2>SYSTEM SETTINGS</h2>
+
+        <button id="notifications" class="primary full">
+          ENABLE NOTIFICATIONS
+        </button>
+
+        <p id="notificationStatus" class="muted">
+          Notifications are not enabled.
+        </p>
+
+        <button id="addMission" class="secondary full">
+          + ADD CUSTOM MISSION
+        </button>
+
+        <button id="reset" class="danger full">
+          RESET PLAYER DATA
+        </button>
+
+        <p class="muted">
+          Progress is saved on this device.
+          Recovery missions are optional.
+          Rest whenever you need it.
+        </p>
+      </div>
+    </section>
+
+    <!-- BOTTOM NAVIGATION -->
+    <nav class="navigation">
+      <button class="nav-btn active" data-page="dashboard">
+        ⌂<small>HOME</small>
+      </button>
+      <button class="nav-btn" data-page="status">
+        ♙<small>STATUS</small>
+      </button>
+      <button class="nav-btn" data-page="history">
+        ▤<small>HISTORY</small>
+      </button>
+      <button class="nav-btn" data-page="settings">
+        ⚙<small>SETTINGS</small>
+      </button>
+    </nav>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="./script.js"></script>
+</body>
+</html>
